@@ -1,0 +1,206 @@
+view Bool0 from DEFAULT to BOOL is sort Elt to Bool .
+op 0 to term false .
+endv
+
+view String0 from DEFAULT to STRING is sort Elt to String .
+op 0 to term "________" .
+endv
+
+fmod STRING-HELPER is 
+    pr STRING .
+    pr INT .
+
+    op multiplex : String Int -> String .
+    op sub : String String Nat Nat  -> String .
+
+    vars S S1 S2 : String .
+    vars N N1 N2 : Int .
+    eq multiplex(S, 0) = "" . 
+    ceq multiplex(S, s N) = S + multiplex(S, N) if N >= 0 .
+    ceq multiplex(S, N) = "" if N < 0 .
+    eq sub(S1, S2, N1, N2) = substr(S1, 0, N1) + substr(S2, 0, N2) + substr(S1, N1 + N2, length(S1)) .
+endfm
+
+fmod SUPERBLOCK is
+    pr NAT .
+    pr FLOAT .
+
+    op pageSize : -> Nat .
+    eq pageSize = 8 .
+
+endfm
+
+
+fmod BITMAP is
+    pr ARRAY{Nat, Bool0} .
+    sort Bitmap .
+    subsort Array{Nat, Bool0} < Bitmap .
+endfm
+
+fmod DATABLOCK is
+    pr ARRAY{Nat, String0} .
+    sort DataBlocks .
+    subsort Array{Nat, String0} < DataBlocks .
+
+    op size : DataBlocks -> Nat .
+    op $size : DataBlocks Nat -> Nat .
+
+    var DBs : DataBlocks .
+    var DB : Entry{Nat, String0} .
+    var N : Nat .
+    eq size(DBs) = $size(DBs, 0) .
+	eq $size((DBs ; DB), N) = $size(DBs,s(N)) .
+	eq $size(empty,N) = N .
+endfm
+
+fmod DB-LIST is
+    pr LIST{Nat} *                                      
+	  (sort List{Nat} to DataBlockList, op __ to (_@_)) .
+endfm
+
+fmod TUPLE2{X :: TRIV, Y :: TRIV} is
+	sort Tuple2 .
+	op ((_,_)) : X$Elt Y$Elt -> Tuple2 .
+	op p1 : Tuple2 -> X$Elt .
+	op p2 : Tuple2 -> Y$Elt .
+	var X : X$Elt .
+	var Y : Y$Elt .
+	eq p1((X,Y)) = X .
+	eq p2((X,Y)) = Y .
+endfm
+
+fmod INODE-SORTS is 
+    pr NAT .
+    pr ARRAY{Nat, Nat0} .
+
+	sorts Size Pointers . 
+    subsort Nat < Size .
+    subsort Array{Nat, Nat0} < Pointers .   
+                                           
+endfm
+
+view Size  from TRIV to INODE-SORTS is sort Elt to Size .      endv
+view Pointers  from TRIV to INODE-SORTS is sort Elt to Pointers .    endv
+
+fmod INODE is
+    pr TUPLE2{Size,Pointers} *                                      
+	  (sort Tuple2 to Inode) .
+
+    ops null, inode : -> Inode .     
+    op update-size : Size Inode -> Inode .
+    op update-pointer : Nat Nat Inode -> Inode .
+    op size : Inode -> Size .
+    op pointer : Nat Inode -> Nat .
+    op pointer-size : Inode -> Nat .
+    op $pointer-size : Pointers Nat -> Nat .
+
+    var S : Size .
+    vars Addr Ptr N : Nat .
+    var I : Inode .
+    var P : Pointers .
+    var E : Entry{Nat, Nat0} .
+
+    eq inode = (4,(1 |-> 0)) .
+    eq update-size(S, I) = (S , p2(I)) .
+    eq update-pointer(Addr, Ptr, I) = (p1(I), insert(Addr, Ptr, p2(I))) .
+    eq size(I) = p1(I) . 
+    eq pointer(Addr, I) = p2(I)[Addr] .
+
+    eq pointer-size(I) = $pointer-size(p2(I),0) .
+	eq $pointer-size((P ; E), N) = $pointer-size(P,s(N)) .
+	eq $pointer-size(empty,N) = N .
+
+endfm
+
+view Inode  from DEFAULT to INODE is sort Elt to Inode .    
+op 0 to term (0,empty) .
+endv
+
+fmod INODE-LIST is
+    pr ARRAY{Nat,Inode} *                                      
+	  (sort Array{Nat,Inode} to InodeList) .
+    pr DB-LIST .
+
+    op update-inode-size : Nat Nat InodeList -> InodeList .
+    op update-inode-pointer : DataBlockList Nat InodeList -> InodeList .
+
+    vars OFF SIZE Ino : Nat .
+    var I : Inode .
+    var DBL : DataBlockList .
+    var IL : InodeList .
+
+    eq update-inode-size(SIZE, Ino, IL) = insert(Ino, update-size(max(size(IL[Ino]), SIZE), IL[Ino]), IL) .
+    eq update-inode-pointer(nil, Ino, IL) = IL .
+    eq update-inode-pointer(DBL, Ino, IL) = update-inode-pointer(tail(DBL),
+                                                                Ino, 
+                                                                insert(Ino, update-pointer(pointer-size(IL[Ino]), head(DBL), IL[Ino]), IL)) .
+endfm
+
+mod FS-DISK is
+    pr SUPERBLOCK .
+    pr BITMAP .
+    pr INODE-LIST .
+    pr DB-LIST .
+    pr DATABLOCK .
+    pr STRING-HELPER .
+
+    sort fs-disk .
+
+    op raw-read : Nat Nat Inode DataBlocks -> String .
+    op $raw-read : Nat Nat Inode DataBlocks -> String .
+    op raw-write : String Nat Nat Inode DataBlocks -> DataBlocks .
+    op $raw-write : String Nat Nat Inode DataBlocks -> DataBlocks .
+    op get-inode : Nat InodeList -> Inode .
+    op update-inode : Nat DataBlockList Nat InodeList -> InodeList .
+    --- op size-in-page : -> Nat .
+
+    vars OFF SIZE Ino : Nat .
+    var I : Inode .
+    var DBs : DataBlocks .
+    var buf : String .
+    var IL : InodeList .
+    var DBL : DataBlockList . 
+    
+    --- extend this to support directories
+    --- eq get-inode(OFF, IL) = IL[OFF quo pageSize].
+
+    --- eq size-in-page = pageSize - OFF rem pageSize .
+    --- call $raw-read or $raw-write requires that SIZE < pageSize
+
+    eq $raw-read(OFF, SIZE, I, DBs) = substr(DBs[p2(I)[OFF quo pageSize]], OFF rem pageSize, SIZE).
+    eq raw-read(OFF, 0, I, DBs) = "" . 
+    ceq raw-read(OFF, SIZE, I, DBs) = $raw-read(OFF, min(SIZE, pageSize - OFF rem pageSize), I, DBs) + 
+                                      raw-read(OFF + (pageSize - (OFF rem pageSize)), SIZE - min(SIZE, pageSize - OFF rem pageSize), I, DBs) 
+                                      if SIZE > 0 .
+
+    eq $raw-write(buf, OFF, SIZE, I, DBs) = insert(p2(I)[OFF quo pageSize],
+                                                    sub(DBs[p2(I)[OFF quo pageSize]], buf, OFF rem pageSize, SIZE) ,
+                                                    DBs) .
+    eq raw-write(buf, OFF, 0, I, DBs) = DBs . 
+    ceq raw-write(buf, OFF, SIZE, I, DBs) = raw-write(substr(buf, min(SIZE, pageSize - OFF rem pageSize), length(buf)), 
+                                                    OFF + (pageSize - OFF rem pageSize), 
+                                                    SIZE - min(SIZE, pageSize - OFF rem pageSize),
+                                                    I,
+                                                    $raw-write(buf, OFF, min(SIZE, pageSize - OFF rem pageSize), I, DBs))
+                                                    if SIZE > 0 .
+ 
+    ---ceq alloc-dbs(ORI-SIZE, SIZE, DBs) = nil if ORI-SIZE >= SIZE .
+    ---ceq alloc-dbs(ORI-SIZE, SIZE, DBs) =  if ORI-SIZE < SIZE .
+    eq update-inode(SIZE, DBL, Ino, IL) = update-inode-pointer(DBL, Ino, update-inode-size(max(SIZE, size(IL[Ino])), Ino, IL)) .
+
+endm
+
+
+
+--- raw-read(0, 10, (4,0 |-> 0), (0 |-> "1234567890")) .
+--- red in FS-DISK : raw-read(0, 11, (4,0 |-> 0), (0 |-> "1234567890")) .
+--- red in FS-DISK : raw-write("1234", 0, 4, (4,0 |-> 0), empty) .
+--- red in FS-DISK : raw-read(4, 11, (16,0 |-> 0 ; 1 |-> 1), (0 |-> "12345678" ; 1 |-> "12345678")) .
+---red in FS-DISK : $raw-write("1234567891", 1, 7, (4,0 |-> 0 ; 1 |-> 1), empty) .
+red in FS-DISK : raw-write("1234567891", 1, 10, (4,0 |-> 0 ; 1 |-> 1), empty) .
+red in FS-DISK : raw-write("1234567891", 1, 10, (4,0 |-> 0 ; 1 |-> 1), (0 |-> "12345678" ; 1 |-> "12345678")) .
+--- red insert("one", 0, insert("two", 2, insert("three", 3, empty))) .
+---red in FS-DISK : $raw-read(0, 7, (4,0 |-> 0), (0 |-> "1234567890")) .
+--- red update-inode-pointer((2 @ 3), 0, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .
+--- red update-inode-size(8, 0, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .
+--- red update-inode(8, (2 @ 3), 1, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .

@@ -1,0 +1,59 @@
+load ./msg
+load ./server
+
+mod TEST is
+protecting MESSAGE .
+protecting SERVER .
+
+ops N1 N2 : -> Oid .
+op init : -> Configuration .
+eq init = init-node(N1, Data, "aaa") 
+          init-node(N2, Data, "bbb") 
+          (send copy from N2 to N1)
+          (send copy from N1 to N2)  .
+
+endm
+
+
+
+
+
+
+
+
+--- mod RABBIT-HOP is
+--- protecting NAT .
+--- protecting INT .
+--- sorts Rabbit RabbitList . 
+--- subsort Rabbit < RabbitList .
+--- ops x o free : -> Rabbit .
+--- op __ : RabbitList RabbitList -> RabbitList [assoc] . 
+--- op initial : Nat -> RabbitList .
+--- var N : Nat .
+--- vars L R : RabbitList .
+--- var B : Rabbit .
+--- eq initial(0) = free .
+--- eq initial(s(N)) = x initial(N) o .
+--- rl [xAdvances] : x free => free x . 
+--- rl [xJumps] : x o free => free o x . 
+--- rl [oAdvances] : free o => o free .
+--- rl [oJumps] : free x o => o x free .
+--- endm
+
+
+--- mod RABBIT is
+--- protecting INT .
+--- sort Rabbitlist .
+--- ops x o free : -> Rabbitlist .
+--- op __ : Rabbitlist Rabbitlist -> Rabbitlist [assoc] .
+--- op initial : Int -> Rabbitlist .
+--- var N : Int .
+
+--- eq initial(0) = free .
+--- eq initial(N) = x initial(N - 1) o .
+
+--- rl [xAdvances] : x free => free x .
+--- rl [xJumps] : x o free => free o x .
+--- rl [oAdvances] : o free => free o .
+--- rl [oJumps] : free x o => o x free .
+--- endm

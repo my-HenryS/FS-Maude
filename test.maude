@@ -1,0 +1,11 @@
+fmod INT-LIST is 
+    pr NAT .
+    pr INT .
+    pr STRING .
+    pr CONVERSION .
+
+    op cool : Nat Nat -> String .
+    vars A B : Nat .
+
+    eq cool(A,B) = string((B - A rem B), 10) .
+endfm

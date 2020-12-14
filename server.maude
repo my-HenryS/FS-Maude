@@ -1,0 +1,30 @@
+load ./msg
+
+mod SERVER is
+    protecting MESSAGE .
+
+    sort NodeType .
+    subsort NodeType < Cid .
+
+    ops Meta Data : -> NodeType . 
+    op buf :_ : String -> Attribute [ctor gather(&)] .
+
+    op init-node : Oid NodeType String -> Configuration .
+
+    var M : Msg .
+    var C : MsgCont .
+    vars N1 N2 : Oid .
+    vars T1 T2 : NodeType .
+    vars S1 S2 : String .
+
+    eq init-node(N1, T1, S1) = < N1 : T1 | buf : S1 > .
+
+    rl [copy] : 
+        < N1 : T1 | buf : S1 > 
+        < N2 : T2 | buf : S2 > 
+        send copy from N1 to N2 
+        =>
+        < N1 : T1 | buf : S1 > 
+        < N2 : T2 | buf : S1 > 
+        send ack from N2 to N1 .
+endm
