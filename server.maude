@@ -8,16 +8,19 @@ load apmaude/apmaude
 mod SERVER is
     pr FS .
     pr ACTOR-MODEL .
+    pr MAP{Float, String} .
 
-    ops FS-DISK FS-CACHE : -> ActorType .
+    ops FS-DISK FS-CACHE Client : -> ActorType .
     op buf :_ : String -> Attribute [ctor gather(&)] .
     op inodes :_ : InodeList -> Attribute [ctor gather(&)] .
     op dblocks :_ : DataBlocks -> Attribute [ctor gather(&)] .
     op i-bitmap :_ : Bitmap -> Attribute [ctor gather(&)] .
     op d-bitmap :_ : Bitmap -> Attribute [ctor gather(&)] .
-    ops persist-inode persist-bm persist-db : -> Content [ctor] .
-    op write : Nat String Nat Nat -> Content .
-    op read : Nat Nat Nat -> Content .
+    op recvq :_ : Map{Float, String} -> Attribute [ctor gather(&)] .
+
+    ops persist-inode persist-bm persist-db failback : Address -> Content  .
+    op write : Nat String Nat Nat Address -> Content .
+    op read : Nat Nat Nat Address -> Content .
     op ack : String Address -> Content . 
 
 
@@ -32,50 +35,66 @@ mod SERVER is
     vars fd off size : Nat .
     var buf : String .
     --- var num-db : Nat .
-    var DBL : ListX .
+    var DBL : NatList .
     vars AS AS2 : AttributeSet .
+    var Q : Map{Float, String} .
 
     crl [write-cache] : 
-        < A1 : FS-CACHE | inodes : IL, dblocks : DBs, i-bitmap : IBM, d-bitmap : DBM > 
-        {T, A1 <- write(fd, buf, off, size)}
+        < A1 : FS-CACHE | inodes : IL, dblocks : DBs, i-bitmap : IBM, d-bitmap : DBM, AS > 
+        {T, A1 <- write(fd, buf, off, size, A2)}
         =>
         < A1 : FS-CACHE | inodes : NEW-IL,
                              dblocks : raw-write(buf, off, size, NEW-IL[fd], DBs),
                              i-bitmap : insert(fd, true, IBM),
-                             d-bitmap : mark(DBM, DBL) >  
-        ---[0.0, A2 <- ack("write succeed: " + buf)] 
+                             d-bitmap : mark(DBM, DBL), AS >  
+        [0.0, A2 <- ack("written: " + buf, A1)] 
 
         if DBL := peek-front(DBM, byte2db(size(IL[fd]), size)) /\ 
            NEW-IL := update-inode(size, DBL, fd, IL) .
 
-    --- rl [read-cache] :
-    ---     < A1 : FS-CACHE | inodes : IL, dblocks : DBs, AS > 
-    ---     send read(fd, off, size) from A2 to A1 
-    ---     =>
-    ---     < A1 : FS-CACHE | inodes : IL, dblocks : DBs, AS > 
-    ---     send ack(raw-read(off, size, IL[fd], DBs)) from A1 to A2 .
+    rl [read-cache] :
+        < A1 : FS-CACHE | inodes : IL, dblocks : DBs, AS > 
+        {T, A1 <- read(fd, off, size, A2)}
+        =>
+        < A1 : FS-CACHE | inodes : IL, dblocks : DBs, AS > 
+        [0.0, A2 <- ack("read: " + raw-read(off, size, IL[fd], DBs), A1)] .
 
-    --- rl [persist-inode] :
-    ---     < A1 : FS-CACHE | inodes : IL, AS > 
-    ---     < A2 : FS-DISK | inodes : IL2, AS2 >
-    ---     send persist-inode from A1 to A2 
-    ---     =>
-    ---     < A1 : FS-CACHE | inodes : IL, AS > 
-    ---     < A2 : FS-DISK | inodes : IL, AS2 > .
+    rl [persist-inode] :
+        < A1 : FS-CACHE | inodes : IL, AS > 
+        < A2 : FS-DISK | inodes : IL2, AS2 >
+        {T, A2 <- persist-inode(A1)}
+        =>
+        < A1 : FS-CACHE | inodes : IL, AS > 
+        < A2 : FS-DISK | inodes : IL, AS2 > .
 
     rl [persist-datablocks] :
         < A1 : FS-CACHE | dblocks : DBs, AS > 
         < A2 : FS-DISK | dblocks : DB2s, AS2 >
-        {T, A2 <- persist-db}
+        {T, A2 <- persist-db(A1)}
         =>
         < A1 : FS-CACHE | dblocks : DBs, AS > 
         < A2 : FS-DISK | dblocks : DBs, AS2 > .
     
-    --- rl [persist-bitmaps] :
-    ---     < A1 : FS-CACHE | i-bitmap : IBM, d-bitmap : DBM , AS > 
-    ---     < A2 : FS-DISK | i-bitmap : IBM2, d-bitmap : DBM2 , AS2 >
-    ---     send persist-bm from A1 to A2 
-    ---     =>
-    ---     < A1 : FS-CACHE | i-bitmap : IBM, d-bitmap : DBM , AS > 
-    ---     < A2 : FS-DISK | i-bitmap : IBM, d-bitmap : DBM , AS2 > .
+    rl [persist-bitmaps] :
+        < A1 : FS-CACHE | i-bitmap : IBM, d-bitmap : DBM , AS > 
+        < A2 : FS-DISK | i-bitmap : IBM2, d-bitmap : DBM2 , AS2 >
+        {T, A2 <- persist-bm(A1)}
+        =>
+        < A1 : FS-CACHE | i-bitmap : IBM, d-bitmap : DBM , AS > 
+        < A2 : FS-DISK | i-bitmap : IBM, d-bitmap : DBM , AS2 > .
+
+    rl [client-ack] :
+        < A1 : Client | recvq : Q >
+        {T, A1 <- ack(buf, A2)} 
+        =>
+        < A1 : Client | recvq : insert(T, buf, Q) > .
+
+    rl [failback] :
+        < A1 : FS-CACHE | AS >
+        < A2 : FS-DISK | AS2 >
+        {T, A1 <- failback(A2)}
+        => 
+        < A1 : FS-CACHE | AS2 >
+        < A2 : FS-DISK | AS2 > .
+
 endm

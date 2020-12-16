@@ -8,6 +8,7 @@ pr APMAUDE .
 
 op test : Config -> Config .
 op init-state : -> Config .
+op init-client : Address -> Config .
 op init-node : Address ActorType -> Config .
 op init-node : Address ActorType InodeList DataBlocks Bitmap Bitmap -> Config .
 
@@ -21,20 +22,24 @@ var state : Config .
 eq LIMIT = 100.0 .
 eq test(state) = run(state,LIMIT) .
 eq init-node(A1, T1) =
-         < A1 : T1 | inodes : (0 |-> (0, 0 |-> 0)), dblocks : empty, i-bitmap : empty, d-bitmap : empty > .
+         init-node(A1, T1, (0 |-> (0, 0 |-> 0)), empty, empty, empty) .
+
 eq init-node(A1, T1, IL, DBs, IBM, DBM) =
          < A1 : T1 | inodes : IL, dblocks : DBs, i-bitmap : IBM, d-bitmap : DBM > .
 
-eq init-state = init-node(10, FS-CACHE) 
-    init-node(11, FS-DISK) 
-    [1.0, 10 <- write(0, "1234567891", 0, 10)] 
-    [2.0, 11 <- persist-db]
-    {0.0 | nil} .
+eq init-client(A1) = < A1 : Client | recvq : empty > .
+
+eq init-state = init-client(0)
+                init-node(10, FS-CACHE) 
+                init-node(11, FS-DISK) 
+                [1.0, 10 <- write(0, "1234567891", 0, 10, 0)]
+                [2.0, 10 <- read(0, 0, 10, 0)]  
+                [3.0, 11 <- persist-db(10)]
+                [4.0, 10 <- failback(11)]
+                [5.0, 10 <- read(0, 0, 10, 0)] 
+                {0.0 | nil} .
 endm
 
+--- search test(init-state) =>! C:Config .
+
 rew test(init-state) .
-
-
-
-
-

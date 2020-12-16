@@ -1,29 +1,38 @@
 set show advisories off .
 
+set show advisories off .
+load server
 load storage
-load term-order
-load apmaude/apmaude
+load main
 
-view Delay from TRIV to DELAY is sort Elt to Delay .                             endv 
+--- raw-read(0, 10, (4,0 |-> 0), (0 |-> "1234567890")) .
+--- red in FS-DISK : raw-read(0, 11, (4,0 |-> 0), (0 |-> "1234567890")) .
+--- red in FS-DISK : raw-write("1234", 0, 4, (4,0 |-> 0), empty) .
+--- red in FS-DISK : raw-read(4, 11, (16,0 |-> 0 ; 1 |-> 1), (0 |-> "12345678" ; 1 |-> "12345678")) .
+---red in FS-DISK : $raw-write("1234567891", 1, 7, (4,0 |-> 0 ; 1 |-> 1), empty) .
+--- red in FS-DISK : raw-write("1234567891", 1, 10, (4,0 |-> 0 ; 1 |-> 1), empty) .
+--- red in FS-DISK : raw-write("1234567891", 1, 10, (4,0 |-> 0 ; 1 |-> 1), (0 |-> "12345678" ; 1 |-> "12345678")) .
+--- red insert("one", 0, insert("two", 2, insert("three", 3, empty))) .
+---red in FS-DISK : $raw-read(0, 7, (4,0 |-> 0), (0 |-> "1234567890")) .
+--- red update-inode-pointer((2 @ 3), 0, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .
+--- red update-inode-size(8, 0, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .
+--- red update-inode(8, (2 @ 3), 1, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .
 
 
-fmod CASSANDRA-SERVER-CLIENT is
-    pr ACTOR-MODEL .
-    pr SET{Nat} * (op _,_ to (_@_)) .
+--- ---load storage
+--- load term-order
 
-endfm
 
-mod CASSANDRA-RULES is
-    pr CASSANDRA-SERVER-CLIENT .
-endm
+--- mod CASSANDRA-SERVER-CLIENT is
+---     pr NAT .
+---     ---pr LIST{NzNat} * (op __ to (_@_)) .
+---     pr META-VIEW .
+---     pr NAT-LIST 
+---      * (sort NatList to h, op __ to (_@_)) .
+--- endm
 
-mod CASSANDRA-ANALYSIS is
-    pr CASSANDRA-RULES .
-    pr APMAUDE .
-endm 
-
-red insert(2, insert(1, empty)) .
-
+--- red append(2, append(1, nil)) .
+--- q
 --- fmod INT-LIST is 
 ---     pr NAT .
 ---     pr INT .

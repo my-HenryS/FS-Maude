@@ -2,7 +2,7 @@ view Bool0 from DEFAULT to BOOL is sort Elt to Bool .
 op 0 to term false .
 endv
 
-view String0 from DEFAULT to STRING is sort Elt to String .
+view String8 from DEFAULT to STRING is sort Elt to String .
 op 0 to term "________" .
 endv
 
@@ -22,8 +22,8 @@ fmod STRING-HELPER is
 endfm
 
 fmod LISTX is
-    pr LIST{Nat} *                                      
-	  (sort List{Nat} to ListX, op __ to (_@_)) .
+    pr NAT-LIST *                                      
+	  (op __ to (_@_)) .
 endfm
 
 fmod SUPERBLOCK is
@@ -44,12 +44,12 @@ fmod BITMAP is
 
     op find-false : Bitmap -> Nat .
     op find-false : Bitmap Nat -> Nat .
-    op peek-front : Bitmap Nat -> ListX .
-    op $peek-front : Bitmap Nat Nat -> ListX .
-    op mark : Bitmap ListX -> Bitmap .
+    op peek-front : Bitmap Nat -> NatList .
+    op $peek-front : Bitmap Nat Nat -> NatList .
+    op mark : Bitmap NatList -> Bitmap .
 
     var BM : Bitmap .
-    var DBL : ListX .
+    var DBL : NatList .
     vars N S Res : Nat .
 
     eq find-false(BM) = find-false(BM, 0) .
@@ -66,15 +66,15 @@ fmod BITMAP is
 endfm
 
 fmod DATABLOCK is
-    pr ARRAY{Nat, String0} .
+    pr ARRAY{Nat, String8} .
     sort DataBlocks .
-    subsort Array{Nat, String0} < DataBlocks .
+    subsort Array{Nat, String8} < DataBlocks .
 
     op size : DataBlocks -> Nat .
     op $size : DataBlocks Nat -> Nat .
 
     var DBs : DataBlocks .
-    var DB : Entry{Nat, String0} .
+    var DB : Entry{Nat, String8} .
     var N : Nat .
     eq size(DBs) = $size(DBs, 0) .
 	eq $size((DBs ; DB), N) = $size(DBs,s(N)) .
@@ -146,11 +146,11 @@ fmod INODE-LIST is
     pr LISTX .
 
     op update-inode-size : Nat Nat InodeList -> InodeList .
-    op update-inode-pointer : ListX Nat InodeList -> InodeList .
+    op update-inode-pointer : NatList Nat InodeList -> InodeList .
 
     vars OFF SIZE Ino : Nat .
     var I : Inode .
-    var DBL : ListX .
+    var DBL : NatList .
     var IL : InodeList .
 
     eq update-inode-size(SIZE, Ino, IL) = insert(Ino, update-size(max(size(IL[Ino]), SIZE), IL[Ino]), IL) .
@@ -173,7 +173,7 @@ fmod FS is
     op raw-write : String Nat Nat Inode DataBlocks -> DataBlocks .
     op $raw-write : String Nat Nat Inode DataBlocks -> DataBlocks .
     op get-inode : Nat InodeList -> Inode .
-    op update-inode : Nat ListX Nat InodeList -> InodeList .
+    op update-inode : Nat NatList Nat InodeList -> InodeList .
     op byte2db : Nat Nat -> Nat .
     --- op size-in-page : -> Nat .
 
@@ -182,7 +182,7 @@ fmod FS is
     var DBs : DataBlocks .
     var buf : String .
     var IL : InodeList .
-    var DBL : ListX . 
+    var DBL : NatList . 
     var DBM IBM : Bitmap .
     
     --- extend this to support directories
@@ -191,7 +191,11 @@ fmod FS is
     --- eq size-in-page = pageSize - OFF rem pageSize .
     --- call $raw-read or $raw-write requires that SIZE < pageSize
 
-    eq $raw-read(OFF, SIZE, I, DBs) = substr(DBs[p2(I)[OFF quo pageSize]], OFF rem pageSize, SIZE).
+    eq $raw-read(OFF, SIZE, I, DBs) = if $hasMapping(p2(I), OFF quo pageSize) 
+                                      then substr(DBs[p2(I)[OFF quo pageSize]], OFF rem pageSize, SIZE) 
+                                      else multiplex("_", SIZE)
+                                      fi .
+    
     eq raw-read(OFF, 0, I, DBs) = "" . 
     ceq raw-read(OFF, SIZE, I, DBs) = $raw-read(OFF, min(SIZE, pageSize - OFF rem pageSize), I, DBs) + 
                                       raw-read(OFF + (pageSize - (OFF rem pageSize)), SIZE - min(SIZE, pageSize - OFF rem pageSize), I, DBs) 
@@ -216,17 +220,3 @@ fmod FS is
 
 endfm
 
-
-
---- raw-read(0, 10, (4,0 |-> 0), (0 |-> "1234567890")) .
---- red in FS-DISK : raw-read(0, 11, (4,0 |-> 0), (0 |-> "1234567890")) .
---- red in FS-DISK : raw-write("1234", 0, 4, (4,0 |-> 0), empty) .
---- red in FS-DISK : raw-read(4, 11, (16,0 |-> 0 ; 1 |-> 1), (0 |-> "12345678" ; 1 |-> "12345678")) .
----red in FS-DISK : $raw-write("1234567891", 1, 7, (4,0 |-> 0 ; 1 |-> 1), empty) .
---- red in FS-DISK : raw-write("1234567891", 1, 10, (4,0 |-> 0 ; 1 |-> 1), empty) .
---- red in FS-DISK : raw-write("1234567891", 1, 10, (4,0 |-> 0 ; 1 |-> 1), (0 |-> "12345678" ; 1 |-> "12345678")) .
---- red insert("one", 0, insert("two", 2, insert("three", 3, empty))) .
----red in FS-DISK : $raw-read(0, 7, (4,0 |-> 0), (0 |-> "1234567890")) .
---- red update-inode-pointer((2 @ 3), 0, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .
---- red update-inode-size(8, 0, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .
---- red update-inode(8, (2 @ 3), 1, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .
