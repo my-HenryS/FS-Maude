@@ -1,30 +1,81 @@
-load ./msg
+set show advisories off .
+
+load storage
+load term-order
+load apmaude/apmaude
+---load apmaude/apcommon
 
 mod SERVER is
-    protecting MESSAGE .
+    pr FS .
+    pr ACTOR-MODEL .
 
-    sort NodeType .
-    subsort NodeType < Cid .
-
-    ops Meta Data : -> NodeType . 
+    ops FS-DISK FS-CACHE : -> ActorType .
     op buf :_ : String -> Attribute [ctor gather(&)] .
+    op inodes :_ : InodeList -> Attribute [ctor gather(&)] .
+    op dblocks :_ : DataBlocks -> Attribute [ctor gather(&)] .
+    op i-bitmap :_ : Bitmap -> Attribute [ctor gather(&)] .
+    op d-bitmap :_ : Bitmap -> Attribute [ctor gather(&)] .
+    ops persist-inode persist-bm persist-db : -> Content [ctor] .
+    op write : Nat String Nat Nat -> Content .
+    op read : Nat Nat Nat -> Content .
+    op ack : String Address -> Content . 
 
-    op init-node : Oid NodeType String -> Configuration .
 
     var M : Msg .
-    var C : MsgCont .
-    vars N1 N2 : Oid .
-    vars T1 T2 : NodeType .
+    vars A1 A2 : Address .
+    vars T1 T2 : ActorType .
     vars S1 S2 : String .
+    vars T T'      : Float .
+    vars IBM DBM IBM2 DBM2 : Bitmap .
+    vars IL NEW-IL IL2 : InodeList .
+    var DBs DB2s : DataBlocks .
+    vars fd off size : Nat .
+    var buf : String .
+    --- var num-db : Nat .
+    var DBL : ListX .
+    vars AS AS2 : AttributeSet .
 
-    eq init-node(N1, T1, S1) = < N1 : T1 | buf : S1 > .
-
-    rl [copy] : 
-        < N1 : T1 | buf : S1 > 
-        < N2 : T2 | buf : S2 > 
-        send copy from N1 to N2 
+    crl [write-cache] : 
+        < A1 : FS-CACHE | inodes : IL, dblocks : DBs, i-bitmap : IBM, d-bitmap : DBM > 
+        {T, A1 <- write(fd, buf, off, size)}
         =>
-        < N1 : T1 | buf : S1 > 
-        < N2 : T2 | buf : S1 > 
-        send ack from N2 to N1 .
+        < A1 : FS-CACHE | inodes : NEW-IL,
+                             dblocks : raw-write(buf, off, size, NEW-IL[fd], DBs),
+                             i-bitmap : insert(fd, true, IBM),
+                             d-bitmap : mark(DBM, DBL) >  
+        ---[0.0, A2 <- ack("write succeed: " + buf)] 
+
+        if DBL := peek-front(DBM, byte2db(size(IL[fd]), size)) /\ 
+           NEW-IL := update-inode(size, DBL, fd, IL) .
+
+    --- rl [read-cache] :
+    ---     < A1 : FS-CACHE | inodes : IL, dblocks : DBs, AS > 
+    ---     send read(fd, off, size) from A2 to A1 
+    ---     =>
+    ---     < A1 : FS-CACHE | inodes : IL, dblocks : DBs, AS > 
+    ---     send ack(raw-read(off, size, IL[fd], DBs)) from A1 to A2 .
+
+    --- rl [persist-inode] :
+    ---     < A1 : FS-CACHE | inodes : IL, AS > 
+    ---     < A2 : FS-DISK | inodes : IL2, AS2 >
+    ---     send persist-inode from A1 to A2 
+    ---     =>
+    ---     < A1 : FS-CACHE | inodes : IL, AS > 
+    ---     < A2 : FS-DISK | inodes : IL, AS2 > .
+
+    rl [persist-datablocks] :
+        < A1 : FS-CACHE | dblocks : DBs, AS > 
+        < A2 : FS-DISK | dblocks : DB2s, AS2 >
+        {T, A2 <- persist-db}
+        =>
+        < A1 : FS-CACHE | dblocks : DBs, AS > 
+        < A2 : FS-DISK | dblocks : DBs, AS2 > .
+    
+    --- rl [persist-bitmaps] :
+    ---     < A1 : FS-CACHE | i-bitmap : IBM, d-bitmap : DBM , AS > 
+    ---     < A2 : FS-DISK | i-bitmap : IBM2, d-bitmap : DBM2 , AS2 >
+    ---     send persist-bm from A1 to A2 
+    ---     =>
+    ---     < A1 : FS-CACHE | i-bitmap : IBM, d-bitmap : DBM , AS > 
+    ---     < A2 : FS-DISK | i-bitmap : IBM, d-bitmap : DBM , AS2 > .
 endm

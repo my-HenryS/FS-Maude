@@ -1,59 +1,40 @@
-load ./msg
-load ./server
+set show advisories off .
+load server
+load storage
 
 mod TEST is
-protecting MESSAGE .
-protecting SERVER .
+pr SERVER .
+pr APMAUDE .
 
-ops N1 N2 : -> Oid .
-op init : -> Configuration .
-eq init = init-node(N1, Data, "aaa") 
-          init-node(N2, Data, "bbb") 
-          (send copy from N2 to N1)
-          (send copy from N1 to N2)  .
+op test : Config -> Config .
+op init-state : -> Config .
+op init-node : Address ActorType -> Config .
+op init-node : Address ActorType InodeList DataBlocks Bitmap Bitmap -> Config .
 
+var A1 : Address .
+var T1 : ActorType .
+var IL : InodeList .
+var DBs : DataBlocks .
+vars IBM DBM : Bitmap .
+var state : Config .
+
+eq LIMIT = 100.0 .
+eq test(state) = run(state,LIMIT) .
+eq init-node(A1, T1) =
+         < A1 : T1 | inodes : (0 |-> (0, 0 |-> 0)), dblocks : empty, i-bitmap : empty, d-bitmap : empty > .
+eq init-node(A1, T1, IL, DBs, IBM, DBM) =
+         < A1 : T1 | inodes : IL, dblocks : DBs, i-bitmap : IBM, d-bitmap : DBM > .
+
+eq init-state = init-node(10, FS-CACHE) 
+    init-node(11, FS-DISK) 
+    [1.0, 10 <- write(0, "1234567891", 0, 10)] 
+    [2.0, 11 <- persist-db]
+    {0.0 | nil} .
 endm
 
+rew test(init-state) .
 
 
 
 
 
-
-
---- mod RABBIT-HOP is
---- protecting NAT .
---- protecting INT .
---- sorts Rabbit RabbitList . 
---- subsort Rabbit < RabbitList .
---- ops x o free : -> Rabbit .
---- op __ : RabbitList RabbitList -> RabbitList [assoc] . 
---- op initial : Nat -> RabbitList .
---- var N : Nat .
---- vars L R : RabbitList .
---- var B : Rabbit .
---- eq initial(0) = free .
---- eq initial(s(N)) = x initial(N) o .
---- rl [xAdvances] : x free => free x . 
---- rl [xJumps] : x o free => free o x . 
---- rl [oAdvances] : free o => o free .
---- rl [oJumps] : free x o => o x free .
---- endm
-
-
---- mod RABBIT is
---- protecting INT .
---- sort Rabbitlist .
---- ops x o free : -> Rabbitlist .
---- op __ : Rabbitlist Rabbitlist -> Rabbitlist [assoc] .
---- op initial : Int -> Rabbitlist .
---- var N : Int .
-
---- eq initial(0) = free .
---- eq initial(N) = x initial(N - 1) o .
-
---- rl [xAdvances] : x free => free x .
---- rl [xJumps] : x o free => free o x .
---- rl [oAdvances] : o free => free o .
---- rl [oJumps] : free x o => o x free .
---- endm

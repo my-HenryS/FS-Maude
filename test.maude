@@ -1,11 +1,74 @@
-fmod INT-LIST is 
-    pr NAT .
-    pr INT .
-    pr STRING .
-    pr CONVERSION .
+set show advisories off .
 
-    op cool : Nat Nat -> String .
-    vars A B : Nat .
+load storage
+load term-order
+load apmaude/apmaude
 
-    eq cool(A,B) = string((B - A rem B), 10) .
+view Delay from TRIV to DELAY is sort Elt to Delay .                             endv 
+
+
+fmod CASSANDRA-SERVER-CLIENT is
+    pr ACTOR-MODEL .
+    pr SET{Nat} * (op _,_ to (_@_)) .
+
 endfm
+
+mod CASSANDRA-RULES is
+    pr CASSANDRA-SERVER-CLIENT .
+endm
+
+mod CASSANDRA-ANALYSIS is
+    pr CASSANDRA-RULES .
+    pr APMAUDE .
+endm 
+
+red insert(2, insert(1, empty)) .
+
+--- fmod INT-LIST is 
+---     pr NAT .
+---     pr INT .
+---     pr STRING .
+---     pr CONVERSION .
+
+---     op cool : Nat Nat -> String .
+---     vars A B : Nat .
+
+---     eq cool(A,B) = string((B - A rem B), 10) .
+--- endfm
+
+--- mod RABBIT-HOP is
+--- protecting NAT .
+--- protecting INT .
+--- sorts Rabbit RabbitList . 
+--- subsort Rabbit < RabbitList .
+--- ops x o free : -> Rabbit .
+--- op __ : RabbitList RabbitList -> RabbitList [assoc] . 
+--- op initial : Nat -> RabbitList .
+--- var N : Nat .
+--- vars L R : RabbitList .
+--- var B : Rabbit .
+--- eq initial(0) = free .
+--- eq initial(s(N)) = x initial(N) o .
+--- rl [xAdvances] : x free => free x . 
+--- rl [xJumps] : x o free => free o x . 
+--- rl [oAdvances] : free o => o free .
+--- rl [oJumps] : free x o => o x free .
+--- endm
+
+
+--- mod RABBIT is
+--- protecting INT .
+--- sort Rabbitlist .
+--- ops x o free : -> Rabbitlist .
+--- op __ : Rabbitlist Rabbitlist -> Rabbitlist [assoc] .
+--- op initial : Int -> Rabbitlist .
+--- var N : Int .
+
+--- eq initial(0) = free .
+--- eq initial(N) = x initial(N - 1) o .
+
+--- rl [xAdvances] : x free => free x .
+--- rl [xJumps] : x o free => free o x .
+--- rl [oAdvances] : o free => free o .
+--- rl [oJumps] : free x o => o x free .
+--- endm
