@@ -11,15 +11,21 @@ op init-state : -> Config .
 op init-client : Address -> Config .
 op init-node : Address ActorType -> Config .
 op init-node : Address ActorType InodeList DataBlocks Bitmap Bitmap -> Config .
+op init-clock : -> Config .
+op init-clock : Float -> Config .
+op desiredState : Config -> Bool [frozen(1)] .
 
 var A1 : Address .
 var T1 : ActorType .
 var IL : InodeList .
 var DBs : DataBlocks .
 vars IBM DBM : Bitmap .
-var state : Config .
+var state C : Config .
+var T : Float .
+var AS : AttributeSet .
+var Q : Map{Float, String} .
 
-eq LIMIT = 100.0 .
+eq LIMIT = 10.0 .
 eq test(state) = run(state,LIMIT) .
 eq init-node(A1, T1) =
          init-node(A1, T1, (0 |-> (0, 0 |-> 0)), empty, empty, empty) .
@@ -29,17 +35,33 @@ eq init-node(A1, T1, IL, DBs, IBM, DBM) =
 
 eq init-client(A1) = < A1 : Client | recvq : empty > .
 
-eq init-state = init-client(0)
-                init-node(10, FS-CACHE) 
-                init-node(11, FS-DISK) 
-                [1.0, 10 <- write(0, "1234567891", 0, 10, 0)]
-                [2.0, 10 <- read(0, 0, 10, 0)]  
-                [3.0, 11 <- persist-db(10)]
-                [4.0, 10 <- failback(11)]
-                [5.0, 10 <- read(0, 0, 10, 0)] 
+eq init-clock = init-clock(1.0).
+eq init-clock(T) = < 0 : SysClock | time : 0.0, tick : T, gas : 2 > [T , 0 <- tick-tock] .
+
+eq init-state = init-clock
+                init-client(1)
+                init-node(2, FS-CACHE) 
+                init-node(3, FS-DISK) 
+                [1.0, 2 <- write(0, "1234567891", 0, 10, 1)]
+                [5.0, 2 <- read(0, 0, 10, 1)]  
+                --- [3.0, 3 <- persist-db(2)]
+                --- [4.0, 2 <- failback(3)]
+                --- [5.0, 10 <- read(0, 0, 10, 1)] 
                 {0.0 | nil} .
+
+eq desiredState(C) = false [owise] .  
+eq desiredState(< A1 : Client | recvq : (T |-> "read: 1234567891", Q), AS > C) = true . 
 endm
 
 --- search test(init-state) =>! C:Config .
-
-rew test(init-state) .
+--- set trace on .
+--- set trace eq off .
+--- set trace on .
+--- set trace mb off .
+--- set trace eq off .
+--- set trace condition off .
+--- rew test(init-state) .
+--- search test(init-state) =>! C:Config such that getTime(C:Config) == 4.0 .
+search test(init-state) =>! C:Config such that not desiredState(C:Config) .
+--- srew test(init-state) using clock-tick ; write-cache ; client-ack ; 
+---                 clock-tick ; read-cache ; client-ack ; clock-tick ; persist-db .

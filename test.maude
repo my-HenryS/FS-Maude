@@ -19,6 +19,17 @@ load main
 --- red update-inode(8, (2 @ 3), 1, (0 |-> (4,0 |-> 0 ; 1 |-> 1))) .
 
 
+    --- crl [auto-persist] :
+    ---     < A1 : FS-CACHE | AS > 
+    ---     < A2 : FS-DISK | AS2 >
+    ---     ---< A3 : SysClock | time : T, tick : TI >
+    ---     {T, A3 <- tick-tock}
+    ---     =>
+    ---     < A1 : FS-CACHE | AS > 
+    ---     < A2 : FS-DISK | AS2 >
+    ---     [0.0, A2 <- persist-db(A1)]
+    ---     if T rem 3.0 == 0.0 .
+
 --- ---load storage
 --- load term-order
 

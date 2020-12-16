@@ -1,23 +1,29 @@
 set show advisories off .
+set clear rules off .
 
 load storage
 load term-order
 load apmaude/apmaude
+load apmaude/generic
 ---load apmaude/apcommon
 
 mod SERVER is
     pr FS .
-    pr ACTOR-MODEL .
+    pr APMAUDE .
     pr MAP{Float, String} .
 
-    ops FS-DISK FS-CACHE Client : -> ActorType .
+    ops FS-DISK FS-CACHE Client SysClock : -> ActorType .
     op buf :_ : String -> Attribute [ctor gather(&)] .
     op inodes :_ : InodeList -> Attribute [ctor gather(&)] .
     op dblocks :_ : DataBlocks -> Attribute [ctor gather(&)] .
     op i-bitmap :_ : Bitmap -> Attribute [ctor gather(&)] .
     op d-bitmap :_ : Bitmap -> Attribute [ctor gather(&)] .
     op recvq :_ : Map{Float, String} -> Attribute [ctor gather(&)] .
+    op time :_ : Float -> Attribute [ctor gather(&)] .
+    op tick :_ : Float -> Attribute [ctor gather(&)] .
+    op gas :_ : Nat -> Attribute [ctor gather(&)] .
 
+    op tick-tock : -> Content .
     ops persist-inode persist-bm persist-db failback : Address -> Content  .
     op write : Nat String Nat Nat Address -> Content .
     op read : Nat Nat Nat Address -> Content .
@@ -25,10 +31,10 @@ mod SERVER is
 
 
     var M : Msg .
-    vars A1 A2 : Address .
+    vars A1 A2 A3 : Address .
     vars T1 T2 : ActorType .
     vars S1 S2 : String .
-    vars T T'      : Float .
+    vars T T' TI      : Float .
     vars IBM DBM IBM2 DBM2 : Bitmap .
     vars IL NEW-IL IL2 : InodeList .
     var DBs DB2s : DataBlocks .
@@ -36,8 +42,17 @@ mod SERVER is
     var buf : String .
     --- var num-db : Nat .
     var DBL : NatList .
-    vars AS AS2 : AttributeSet .
+    vars AS AS2 AS3 : AttributeSet .
     var Q : Map{Float, String} .
+    var SL : ScheduleList .
+    var GS : Nat .
+
+    rl [clock-tick] :
+        < A1 : SysClock | time : T, tick : TI, gas : GS >
+        {T', A1 <- tick-tock}
+        => 
+        < A1 : SysClock | time : T + TI, tick : TI, gas : GS >
+        [TI , A1 <- tick-tock] . 
 
     crl [write-cache] : 
         < A1 : FS-CACHE | inodes : IL, dblocks : DBs, i-bitmap : IBM, d-bitmap : DBM, AS > 
@@ -59,21 +74,29 @@ mod SERVER is
         < A1 : FS-CACHE | inodes : IL, dblocks : DBs, AS > 
         [0.0, A2 <- ack("read: " + raw-read(off, size, IL[fd], DBs), A1)] .
 
+    rl [try-persist-inode] :
+        < A1 : FS-CACHE | AS > < A2 : FS-DISK |  AS2 > < A3 : SysClock | time : T, tick : TI, gas : s GS >
+        =>
+        < A1 : FS-CACHE | AS > < A2 : FS-DISK | AS2 > < A3 : SysClock | time : T, tick : TI, gas : GS >
+        [0.0, A2 <- persist-inode(A1)] .
+
+    rl [try-persist-db] :
+        < A1 : FS-CACHE | AS > < A2 : FS-DISK |  AS2 > < A3 : SysClock | time : T, tick : TI, gas : s GS >
+        =>
+        < A1 : FS-CACHE | AS > < A2 : FS-DISK | AS2 > < A3 : SysClock | time : T, tick : TI, gas : GS >
+        [0.0, A2 <- persist-db(A1)] .
+
     rl [persist-inode] :
-        < A1 : FS-CACHE | inodes : IL, AS > 
-        < A2 : FS-DISK | inodes : IL2, AS2 >
+        < A1 : FS-CACHE | inodes : IL, AS > < A2 : FS-DISK | inodes : IL2, AS2 >
         {T, A2 <- persist-inode(A1)}
         =>
-        < A1 : FS-CACHE | inodes : IL, AS > 
-        < A2 : FS-DISK | inodes : IL, AS2 > .
+        < A1 : FS-CACHE | inodes : IL, AS > < A2 : FS-DISK | inodes : IL, AS2 > .
 
-    rl [persist-datablocks] :
-        < A1 : FS-CACHE | dblocks : DBs, AS > 
-        < A2 : FS-DISK | dblocks : DB2s, AS2 >
+    rl [persist-db] :
+        < A1 : FS-CACHE | dblocks : DBs, AS >  < A2 : FS-DISK | dblocks : DB2s, AS2 >
         {T, A2 <- persist-db(A1)}
         =>
-        < A1 : FS-CACHE | dblocks : DBs, AS > 
-        < A2 : FS-DISK | dblocks : DBs, AS2 > .
+        < A1 : FS-CACHE | dblocks : DBs, AS >  < A2 : FS-DISK | dblocks : DBs, AS2 > .
     
     rl [persist-bitmaps] :
         < A1 : FS-CACHE | i-bitmap : IBM, d-bitmap : DBM , AS > 
@@ -84,17 +107,23 @@ mod SERVER is
         < A2 : FS-DISK | i-bitmap : IBM, d-bitmap : DBM , AS2 > .
 
     rl [client-ack] :
-        < A1 : Client | recvq : Q >
+        < A1 : Client | recvq : Q > 
         {T, A1 <- ack(buf, A2)} 
         =>
         < A1 : Client | recvq : insert(T, buf, Q) > .
 
+    rl [try-failback] :
+        < A1 : FS-CACHE | AS > < A2 : FS-DISK |  AS2 >
+        < A3 : SysClock | time : T, tick : TI, gas : s GS >
+        =>
+        < A1 : FS-CACHE | AS > < A2 : FS-DISK | AS2 > 
+        < A3 : SysClock | time : T, tick : TI, gas : GS >
+        [0.0, A1 <- failback(A2)] .
+
     rl [failback] :
-        < A1 : FS-CACHE | AS >
-        < A2 : FS-DISK | AS2 >
+        < A1 : FS-CACHE | AS > < A2 : FS-DISK | AS2 > 
         {T, A1 <- failback(A2)}
         => 
-        < A1 : FS-CACHE | AS2 >
-        < A2 : FS-DISK | AS2 > .
+        < A1 : FS-CACHE | AS2 > < A2 : FS-DISK | AS2 > .
 
 endm
